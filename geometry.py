@@ -27,6 +27,3 @@ def intersection(a, b, c, x0, y0, r, floor, roof):
             return -1, -1
         else:
             return c, y  
-
-
-print(intersection(1, 0, 1, 0.5, 2, 1, 0, 1))
