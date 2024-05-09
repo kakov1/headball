@@ -1,183 +1,136 @@
 import pygame
-from geometry import intersection
-from math import ceil
+import pymunk
+import pymunk.pygame_util
+import math
+
+pygame.init()
+
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 700
+FLOOR_HEIGHT = 40
+
+GOAL_WIDTH = 120
+GOAL_HEIGHT = 300
+
+diam = 200
+side = 100
+
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT + FLOOR_HEIGHT))
+pygame.display.set_caption("HeadBall")
+
+space = pymunk.Space()
+space.gravity = (0, 1000)
+static_body = space.static_body
+
+draw_options = pymunk.pygame_util.DrawOptions(screen)
+
+clock = pygame.time.Clock()
+FPS = 60
+
+BG = (0, 191, 255)
+
+ball_image = pygame.transform.scale(pygame.image.load("images/ball.png"), (diam, diam)).convert_alpha()
+right_goal_image = pygame.transform.scale(pygame.image.load("images/right_goal.png"), (GOAL_WIDTH, GOAL_HEIGHT)).convert_alpha()
+left_goal_image = pygame.transform.scale(pygame.image.load("images/left_goal.png"), (GOAL_WIDTH, GOAL_HEIGHT)).convert_alpha()
+right_player_image = pygame.transform.scale(pygame.image.load("images/right_player.png"), (side, side)).convert_alpha()
+left_player_image = pygame.transform.scale(pygame.image.load("images/left_player.png"), (side, side)).convert_alpha()
 
 
-class GameSession:
-    def __init__(self, gravity, images):
-        self.window = None
-        self.goal1 = None
-        self.goal2 = None
-        self.player1 = None
-        self.player2 = None
-        self.ball = None
-        self.gravity = gravity
-        self.images = images
+def create_ball(radius, pos):
+    body = pymunk.Body()
+    body.position = pos
+    body.mass = 5
+    body.moment = math.inf
+    shape = pymunk.Circle(body, radius)
+    shape.elasticity = 0.8
 
-    def AddWindow(self, window):
-        self.window = window
 
-    def AddGoal1(self, goal):
-        self.goal1 = goal
+    pivot = pymunk.PivotJoint(static_body, body, (0, 0), (0, 0))
+    pivot.max_bias = 0
+    pivot.max_force = 1000
 
-    def AddGoal2(self, goal):
-        self.goal2 = goal
 
-    def AddPlayer1(self, player):
-        self.player1 = player
+    space.add(body, shape)
+    return shape
 
-    def AddPlayer2(self, player):
-        self.player2 = player
+
+def create_player(size, pos):
+    body = pymunk.Body()
+    body.position = pos
+    body.mass = 2
+    body.moment = math.inf
+    shape = pymunk.Poly.create_box(body, size)
+    #shape.elasticity = 0.8
+    space.add(body, shape)
+    return shape
+
+
+def create_cushion(poly_dims):
+    body = pymunk.Body(body_type=pymunk.Body.STATIC)
+    body.position = ((0, 0))
+    shape = pymunk.Poly(body, poly_dims)
+    shape.elasticity = 0.2
+    space.add(body, shape)
+    return shape
     
-    def AddBall(self, ball):
-        self.ball = ball
+floor = create_cushion([(0, SCREEN_HEIGHT), (SCREEN_WIDTH, SCREEN_HEIGHT),
+                        (0, SCREEN_HEIGHT+FLOOR_HEIGHT), (SCREEN_WIDTH, SCREEN_HEIGHT+FLOOR_HEIGHT)])
+right_wall = create_cushion([(0,0),(0, SCREEN_HEIGHT)])
+left_wall = create_cushion([(SCREEN_WIDTH, 0),(SCREEN_WIDTH, SCREEN_HEIGHT)])
+ceiling = create_cushion([(0, 0), (SCREEN_WIDTH, 0)])
+right_goal = create_cushion([(0, SCREEN_HEIGHT - GOAL_HEIGHT), (GOAL_WIDTH, SCREEN_HEIGHT - GOAL_HEIGHT),
+                             (0, SCREEN_HEIGHT - GOAL_HEIGHT*14/15), (GOAL_WIDTH, SCREEN_HEIGHT - GOAL_HEIGHT*14/15)])
+right_goal = create_cushion([(SCREEN_WIDTH - GOAL_WIDTH, SCREEN_HEIGHT - GOAL_HEIGHT), (SCREEN_WIDTH, SCREEN_HEIGHT - GOAL_HEIGHT),
+                             (SCREEN_WIDTH, SCREEN_HEIGHT - GOAL_HEIGHT*14/15), (SCREEN_WIDTH - GOAL_WIDTH, SCREEN_HEIGHT - GOAL_HEIGHT*14/15)])
 
-    def hit(self, player):
-        for CoordX in [player.x + player.width, player.x]:
-            if intersection(1, 0, CoordX,
-                        self.ball.x + self.ball.width/2, self.ball.y + self.ball.height/2, self.ball.rad,
-                        player.y, player.y + player.height) != (-1,-1):
-                if self.ball.vx != 0 and self.ball.motionx != player.motionx != 0:
-                    self.ball.motionx = -self.ball.motionx
-                    self.ball.vx = -self.ball.vx
-                else:
-                    self.ball.vx = player.speed/2
-                    self.ball.motionx = player.motionx
+ball = create_ball(diam/2, (SCREEN_WIDTH/2, SCREEN_HEIGHT - diam/2))
+right_player = create_player((side, side), (SCREEN_WIDTH - GOAL_WIDTH - side/2, SCREEN_HEIGHT - side/2))
+left_player = create_player((side, side), (GOAL_WIDTH + side/2, SCREEN_HEIGHT - side/2))
 
 
-    def running(self):
-        clock = pygame.time.Clock()
+run = True
+left_f = False
+right_f = False
 
-        running = True
+while run:
+
+    clock.tick(FPS)
+    space.step(1 / FPS)
+
+    screen.fill(BG)
+    pygame.draw.rect(screen, (51,102,0), (0, SCREEN_HEIGHT, SCREEN_WIDTH, FLOOR_HEIGHT))
+    screen.blit(right_goal_image, (0, SCREEN_HEIGHT - GOAL_HEIGHT))
+    screen.blit(left_goal_image, (SCREEN_WIDTH - GOAL_WIDTH, SCREEN_HEIGHT - GOAL_HEIGHT))
+    screen.blit(ball_image, (ball.body.position[0]-diam/2, ball.body.position[1] - diam/2))
+    screen.blit(right_player_image, (right_player.body.position[0]-side/2,
+                                     right_player.body.position[1] - side/2))
+    screen.blit(left_player_image, (left_player.body.position[0]-side/2,
+                                     left_player.body.position[1] - side/2))
+    
+    left_player.body.velocity = (0, left_player.body.velocity[1])
+ 
+    for event in pygame.event.get():
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_RIGHT:
+                right_f = True
+            if event.key == pygame.K_LEFT:
+                left_f = True
+            if event.key == pygame.K_UP:
+                left_player.body.apply_impulse_at_local_point((0, -1000))
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_RIGHT:
+                right_f = False
+            if event.key == pygame.K_LEFT:
+                left_f = False
+        if event.type == pygame.QUIT:
+            run = False
+    if left_f and left_player.body.position[0] -side/2 > 0:
+        left_player.body.velocity = (-1000, left_player.body.velocity[1])
+    if right_f and left_player.body.position[0] + side/2 < SCREEN_WIDTH:
+        left_player.body.velocity = (1000, left_player.body.velocity[1])
         
-        while running:
-            self.frame()
-
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_RIGHT:
-                        self.player1.motionx = 1
-                    if event.key == pygame.K_LEFT:
-                        self.player1.motionx = -1
-                    if event.key == pygame.K_UP:
-                        if self.player1.y == self.window.height - self.player1.height:
-                            self.player1.motiony = True
-                            self.player1.vy = 50
-                elif event.type == pygame.KEYUP:
-                    if event.key == pygame.K_RIGHT:
-                        self.player1.motionx = 0
-                    if event.key == pygame.K_LEFT:
-                        self.player1.motionx = 0
-
-            pygame.display.update()
-            
-            clock.tick(60)
-
-    def frame(self):
-        self.hit(self.player1)
-        self.player1.moving((self.window.width, self.window.height), self.gravity)
-        self.player2.moving((self.window.width, self.window.height), self.gravity)
-        self.ball.moving((self.window.width, self.window.height))
-        self.window.screen.fill((0, 191, 255))
-        self.window.screen.blit(self.images["goal1"], (0, 400))
-        self.window.screen.blit(self.images["goal2"], (1180, 400))
-        self.window.screen.blit(self.images["player1"], (self.player1.x, self.player1.y))
-        self.window.screen.blit(self.images["player2"], (self.player2.x, self.player2.y))
-        self.window.screen.blit(self.images["ball"], (self.ball.x, self.ball.y))
-
-
-class Window:
-    def __init__(self, width, height):
-        self.width = width
-        self.height = height
-        self.screen = pygame.display.set_mode([width, height])
-
-
-class Goal:
-    def __init__(self, width, height):
-
-       self.width = width
-       self.height = height
-
-
-class Player:
-    def __init__(self, width, height, StartPosX, StartPosY, speed):
-
-       self.width = width
-       self.height = height
-       self.x = StartPosX
-       self.y = StartPosY
-       self.vy = 0
-       self.motionx = 0
-       self.motiony = False
-       self.speed = speed
-    
-    def moving(self, FieldSize, gravity):
-        if (self.x > 0 or self.motionx != -1) and\
-            (self.x < FieldSize[0] - self.width or self.motionx != 1):
-            self.x += self.motionx*self.speed
-        if self.motiony == True:
-            if self.y > FieldSize[1] - self.height:
-                self.motiony = False
-                self.y = FieldSize[1] - self.height
-                self.vy = 0
-                return
-            self.y -= self.vy
-            self.vy -= gravity
-    
-
-class Ball:
-    def __init__(self, width, height, StartPosX, StartPosY):
-        self.width = width
-        self.height = height
-        self.x = StartPosX
-        self.y = StartPosY
-        self.vy = 0
-        self.vx = 0
-        self.motionx = 0
-        self.motiony = False
-        self.rad = self.width/2
-
-    def moving(self, FieldSize):
-        if self.x < 0 or self.x > FieldSize[0] - self.width:
-            self.vx = -self.vx
-            self.motionx = -self.motionx
-        self.x += self.vx
-
-def main():
-    images = {"player1": pygame.transform.scale(pygame.image.load("images/player1.png"), (100, 100)),
-              "player2": pygame.transform.scale(pygame.image.load("images/player2.png"), (100, 100)),
-              "goal1": pygame.transform.scale(pygame.image.load("images/goal1.png"), (120, 300)),
-              "goal2": pygame.transform.scale(pygame.image.load("images/goal2.png"), (120, 300)),
-              "ball": pygame.transform.scale(pygame.image.load("images/ball.png"), (150, 150))}
-
-    pygame.init()
-
-    game = GameSession(5, images)
-    window = Window(1300, 700)
-
-    goal1 = Goal(120, 300)
-    goal2 = Goal(60, 150)
-    player1 = Player(100, 100, 120, 600, 5)
-    player2 = Player(100, 100, 1080, 600, 5)
-    ball = Ball(150, 150, 575, 550)
-
-    game.AddWindow(window)
-    game.AddGoal1(goal1)
-    game.AddGoal2(goal2)
-    game.AddPlayer1(player1)
-    game.AddPlayer2(player2)
-    game.AddBall(ball)
-
+    #space.debug_draw(draw_options)
     pygame.display.update()
 
-    game.running()
 
-    pygame.quit()
-
-
-if __name__ == "__main__":
-    main()
+pygame.quit()
