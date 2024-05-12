@@ -3,29 +3,8 @@ import pymunk
 import pymunk.pygame_util
 import math
 from params import *
-import time
-
-pygame.init()
-
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT + FLOOR_HEIGHT))
-pygame.display.set_caption("HeadBall")
-
-font = pygame.font.SysFont('Comic Sans MS', FONT_SIZE)
-
-space = pymunk.Space()
-space.gravity = (0, 1000)
-static_body = space.static_body
-
-draw_options = pymunk.pygame_util.DrawOptions(screen)
-
-clock = pygame.time.Clock()
-
-ball_image = pygame.transform.scale(pygame.image.load("images/ball.png"), (diam, diam)).convert_alpha()
-right_goal_image = pygame.transform.scale(pygame.image.load("images/right_goal.png"), (GOAL_WIDTH, GOAL_HEIGHT)).convert_alpha()
-left_goal_image = pygame.transform.scale(pygame.image.load("images/left_goal.png"), (GOAL_WIDTH, GOAL_HEIGHT)).convert_alpha()
-right_player_image = pygame.transform.scale(pygame.image.load("images/right_player.png"), (side, side)).convert_alpha()
-left_player_image = pygame.transform.scale(pygame.image.load("images/left_player.png"), (side, side)).convert_alpha()
-
+import socket
+import asyncio
 
 def create_ball(radius, pos):
     body = pymunk.Body()
@@ -134,7 +113,63 @@ def check_goal(ball):
         return True
     return False
     
+
+def create_client():
+    try:
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.connect(ADDR)
+        return client
+    except ConnectionRefusedError:
+        print("server isn't available")
+        exit(1)
+
+
+def send_state(client, left, right, up):
+    message = str(int(left)) + str(int(right)) + str(int(up))
+    client.send(message.encode(FORMAT))
     
+    
+async def accept_state(client):
+    data = client.recv(SIZE).decode(FORMAT)
+    if len(str(data)) != 3:
+        return False 
+    return bool(int(data[0])), bool(int(data[1])), bool(int(data[2]))
+
+
+async def request(client, left, right, up):
+    send_state(client, left, right, up)
+    data = await accept_state(client)
+    
+    return data
+
+client = create_client()
+player_number = int.from_bytes(client.recv(SIZE), "little")
+
+if player_number == 1:
+    print("Waiting second player")
+    client.recv(SIZE)
+
+pygame.init()
+
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT + FLOOR_HEIGHT))
+pygame.display.set_caption("HeadBall")
+
+font = pygame.font.SysFont('Comic Sans MS', FONT_SIZE)
+
+space = pymunk.Space()
+space.gravity = (0, 1000)
+static_body = space.static_body
+
+draw_options = pymunk.pygame_util.DrawOptions(screen)
+
+clock = pygame.time.Clock()
+
+ball_image = pygame.transform.scale(pygame.image.load("images/ball.png"), (diam, diam)).convert_alpha()
+right_goal_image = pygame.transform.scale(pygame.image.load("images/right_goal.png"), (GOAL_WIDTH, GOAL_HEIGHT)).convert_alpha()
+left_goal_image = pygame.transform.scale(pygame.image.load("images/left_goal.png"), (GOAL_WIDTH, GOAL_HEIGHT)).convert_alpha()
+right_player_image = pygame.transform.scale(pygame.image.load("images/right_player.png"), (side, side)).convert_alpha()
+left_player_image = pygame.transform.scale(pygame.image.load("images/left_player.png"), (side, side)).convert_alpha()
+
 floor = create_cushion(FLOOR_SIZE)
 right_wall = create_cushion(RIGHT_WALL_SIZE)
 left_wall = create_cushion(LEFT_WALL_SIZE)
@@ -142,84 +177,99 @@ ceiling = create_cushion(CEILING_SIZE)
 right_goal = create_cushion(RIGHT_GOAL_SIZE)
 left_goal = create_cushion(LEFT_GOAL_SIZE)
 
-game_ball = create_ball(diam/2, BALL_START_POS)
-right_player = create_player((side, side), RIGHT_PLAYER_START_POS)
-left_player = create_player((side, side), LEFT_PLAYER_START_POS)
 
-left_motion_left = False
-left_motion_right = False
-left_motion_up = False
-
-right_motion_left = False
-right_motion_right = False
-right_motion_up = False
-
-left_goals = 0
-right_goals = 0
-is_goal = False
-
-run = True
-
-
-while run:
-
-    clock.tick(FPS)
-    space.step(1 / FPS)
+async def main():
     
-    is_goal = check_goal(game_ball)
-    
-    if is_goal:
-        if goal(game_ball, left_player, right_player):
-            right_goals += 1
-        else:
-            left_goals += 1 
+    game_ball = create_ball(diam/2, BALL_START_POS)
+    right_player = create_player((side, side), RIGHT_PLAYER_START_POS)
+    left_player = create_player((side, side), LEFT_PLAYER_START_POS)
 
-    frame(left_player, right_player, game_ball)
-      
-    text = font.render(f'{left_goals}:{right_goals}', False, (0, 0, 0))
-    screen.blit(text, (SCREEN_WIDTH/2 - text.get_width()/2, 0))
+    player_motion_left = False
+    player_motion_right = False
+    player_motion_up = False
+
+    opponent_motion_left = False
+    opponent_motion_right = False
+    opponent_motion_up = False
     
-    left_motion_up = reset_speed(left_player)
-    right_motion_up = reset_speed(right_player)
- 
-    for event in pygame.event.get():
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_RIGHT:
-                left_motion_right = True
-            if event.key == pygame.K_LEFT:
-                left_motion_left = True
-            if event.key == pygame.K_UP:
-                left_motion_up = True
-            if event.key == pygame.K_d:
-                right_motion_right = True
-            if event.key == pygame.K_a:
-                right_motion_left = True
-            if event.key == pygame.K_w:
-                right_motion_up = True
-        if event.type == pygame.KEYUP:
-            if event.key == pygame.K_RIGHT:
-                left_motion_right = False
-            if event.key == pygame.K_LEFT:
-                left_motion_left = False
-            if event.key == pygame.K_UP:
-                left_motion_up = False
-            if event.key == pygame.K_d:
-                right_motion_right = False
-            if event.key == pygame.K_a:
-                right_motion_left = False
-            if event.key == pygame.K_w:
-                right_motion_up = False
-        if event.type == pygame.QUIT:
-            run = False
+    left_left, left_right, left_up = False, False, False
+    right_left, right_right, right_up = False, False, False
+
+    left_goals = 0
+    right_goals = 0
+    is_goal = False
+
+    run = True
     
-    set_speed(left_player, left_motion_left, left_motion_right, left_motion_up)
-    set_speed(right_player, right_motion_left, right_motion_right, right_motion_up)
+    while run:
+
+        clock.tick(FPS)
+        space.step(1 / FPS)
         
-    kick(left_player, game_ball)
-    kick(right_player, game_ball)
+        is_goal = check_goal(game_ball)
+        
+        if is_goal:
+            if goal(game_ball, left_player, right_player):
+                right_goals += 1
+            else:
+                left_goals += 1 
+
+        frame(left_player, right_player, game_ball)
+        
+        text = font.render(f'{left_goals}:{right_goals}', False, (0, 0, 0))
+        screen.blit(text, (SCREEN_WIDTH/2 - text.get_width()/2, 0))
+        
+        player_motion_up = reset_speed(left_player)
+        opponent_motion_up = reset_speed(right_player)
     
-    #space.debug_draw(draw_options)
-    pygame.display.update()
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RIGHT:
+                    player_motion_right = True
+                if event.key == pygame.K_LEFT:
+                    player_motion_left = True
+                if event.key == pygame.K_UP:
+                    player_motion_up = True
+            if event.type == pygame.KEYUP:
+                if event.key == pygame.K_RIGHT:
+                    player_motion_right = False
+                if event.key == pygame.K_LEFT:
+                    player_motion_left = False
+                if event.key == pygame.K_UP:
+                    player_motion_up = False
+            if event.type == pygame.QUIT:
+                run = False
+        
+        data = await request(client, player_motion_left, player_motion_right, player_motion_up)
+        
+        if not data:
+            print("Opponent exit")
+            return
+        
+        opponent_motion_left, opponent_motion_right, opponent_motion_up = data
+        
+        if player_number == 1:
+            left_left, left_right, left_up =\
+            player_motion_left, player_motion_right, player_motion_up
+            right_left, right_right, right_up =\
+            opponent_motion_left, opponent_motion_right, opponent_motion_up
+        else:
+            right_left, right_right, right_up =\
+            player_motion_left, player_motion_right, player_motion_up
+            left_left, left_right, left_up =\
+            opponent_motion_left, opponent_motion_right, opponent_motion_up
+        
+        set_speed(left_player, left_left, left_right, left_up)
+        set_speed(right_player, right_left, right_right, right_up)
+            
+        kick(left_player, game_ball)
+        kick(right_player, game_ball)
+        
+        #space.debug_draw(draw_options)
+        pygame.display.update()
 
 
-pygame.quit()
+if __name__ == "__main__":
+    asyncio.run(main())
+    client.close()
+    pygame.quit()
