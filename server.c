@@ -79,7 +79,7 @@ void receiveAndPrintData(void* args)
 
             sendReceivedMessageToClients(buffer, player->socketFD);
         }
-        if (amountReceived <= 0)
+        if (amountReceived < 0)
         {
             send(acceptedSockets[playersCount - player->playerNum].AcceptedSocketFD,
                  &playersCount, sizeof(int), 0);
